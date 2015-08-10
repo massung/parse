@@ -1,0 +1,20 @@
+#+TITLE Monadic parsing package for Common Lisp
+#+AUTHOR Jeffrey Massung
+
+* The PARSE Package
+
+The parse package is a simple monadic parsing library for Common Lisp. It is based on the [[http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html|Parsec]] library from Haskell, but it a bit more accessible to Lisp.
+
+It makes use of the [[https://github.com/massung/re|RE]] and [[https://github.com/massung/lexer|LEXER]] packages as well.
+
+** Quickstart
+
+Once loaded, you should be able to quickly begin creating parsers. However, first you'll need a lexer to tokenize your input string. For now, let's create a simple URL parser.
+
+
+
+** Monadic Parse Combinators
+
+TODO:
+
+**
