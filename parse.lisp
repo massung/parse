@@ -20,25 +20,34 @@
 (defpackage :parse
   (:use :cl :lexer)
   (:export
+   #:defparser
+
+   ;; initiate a parse
    #:parse
 
-   ;; parse combinator macros
-   #:.let*
+   ;; monadic bind operations
+   #:>>=
+   #:>>
 
-   ;; parse combinator functions
-   #:.bind
+   ;; monadic functions
    #:.ret
    #:.fail
    #:.opt
-   #:.satisfy
-   #:.any
    #:.is
-   #:.is-not
+
+   ;; parse combinators
    #:.one-of
-   #:.none-of
    #:.many
    #:.many1
-   #:.skip))
+   #:.sep-by
+   #:.sep-by1
+   #:.skip
+   #:.between
+
+   ;; parse combinator macros
+   #:.let*
+   #:.prog1))
+
 
 (in-package :parse)
 
@@ -49,50 +58,65 @@
 
 ;;; ----------------------------------------------------
 
+(defmacro defparser (name &body ps)
+  "Create a parse combinator."
+  (let ((st (gensym)))
+    `(defun ,name (,st)
+       ,(when (stringp (first ps)) (pop ps))
+       (funcall (>> ,@ps) ,st))))
+
+;;; ----------------------------------------------------
+
 (defun parse (parse-combinator lexer string &optional source)
   "Create a parse-state and pass it through a parse combinator."
-  (lex:with-lexer (state lexer string :source source)
-
-    ;; create a function that can fetch the next token
+  (lex:with-lexer (lex-st lexer string :source source)
     (flet ((next-token ()
-             (lex:read-token state)))
+             (lex:read-token lex-st)))
 
-      ;; create the initial parse state
+      ;; create the parse state
       (let ((st (make-parse-state #'next-token (next-token))))
 
         ;; parse until done or something goes wrong
         (handler-case
             (funcall parse-combinator st)
           (condition (c)
-
-            ;; who what went wrong and where
             (let ((tok (parse-state-token st)))
-              (error "~a on line ~d~@[ of ~s~] near ~s"
+              (error "~a on line ~d~@[ of ~s~]"
                      c
-                     (lex:token-line tok)
-                     (lex:token-source tok)
-                     (lex:token-lexeme tok)))))))))
+                     (token-line tok)
+                     (token-source tok)))))))))
 
 ;;; ----------------------------------------------------
 
-(defun .bind (m f)
+(defun >>= (p f)
   "Monadic bind combinator."
   (lambda (st)
     (multiple-value-bind (x okp)
-        (funcall m st)
+        (funcall (if (keywordp p) (.is p) p) st)
       (when okp
         (funcall (funcall f x) st)))))
 
 ;;; ----------------------------------------------------
 
-(defun _bind (m p)
-  "Monadic bind, ignore intermediate result."
+(defun >> (&rest ps)
+  "Monadic bind, ignore intermediate results. Return the last."
+  (lambda (st)
+    (let ((result nil))
+      (dolist (p ps (values result t))
+        (multiple-value-bind (x okp)
+            (funcall (if (keywordp p) (.is p) p) st)
+          (if okp
+              (setf result x)
+            (return)))))))
+
+;;; ----------------------------------------------------
+
+(defun .opt (p &optional value)
+  "Optionally match a parse combinator or return value."
   (lambda (st)
     (multiple-value-bind (x okp)
-        (funcall m st)
-      (declare (ignore x))
-      (when okp
-        (funcall p st)))))
+        (funcall (if (keywordp p) (.is p) p) st)
+      (values (if okp x value) t))))
 
 ;;; ----------------------------------------------------
 
@@ -102,64 +126,33 @@
 
 ;;; ----------------------------------------------------
 
-(defun .fail (st)
+(defun .fail (datum &rest arguments)
   "Ensures that the parse combinator fails."
-  (declare (ignore st)))
-
-;;; ----------------------------------------------------
-
-(defun .opt (p &optional value)
-  "Optionally match a parse combinator or return value."
   (lambda (st)
-    (multiple-value-bind (x okp)
-        (funcall p st)
-      (values (if okp x value) t))))
-
-;;; ----------------------------------------------------
-
-(defun .satisfy (pred)
-  "Verify that the current token satisfies a predicate."
-  (lambda (st)
-    (let ((tok (parse-state-token st)))
-      (when (and tok (funcall pred tok))
-        (multiple-value-prog1
-            (values (lex:token-value (parse-state-token st)) t)
-          (let ((next-token (funcall (parse-state-lexer st))))
-            (setf (parse-state-token st) next-token)))))))
-
-;;; ----------------------------------------------------
-
-(defun .any ()
-  "T as long as there is something in the token stream."
-  (.satisfy #'identity))
+    (declare (ignore st))
+    (apply #'error datum arguments)))
 
 ;;; ----------------------------------------------------
 
 (defun .is (class)
   "Checks if the current token is of a given class."
-  (.satisfy (lambda (tok)
-              (eq (lex:token-class tok) class))))
+  (lambda (st)
+    (let ((tok (parse-state-token st)))
+      (when (and tok (eq (token-class tok) class))
+        (multiple-value-prog1
+            (values (token-value tok) t)
+          (let ((next-tok (funcall (parse-state-lexer st))))
+            (setf (parse-state-token st) next-tok)))))))
 
 ;;; ----------------------------------------------------
 
-(defun .is-not (class)
-  "Ensures the next token is not of a given class."
-  (.satisfy (lambda (tok)
-              (not (eq (lex:token-class tok) class)))))
-
-;;; ----------------------------------------------------
-
-(defun .one-of (&rest classes)
+(defun .one-of (&rest ps)
   "Checks to see if the current token is one of several classes."
-  (.satisfy (lambda (tok)
-              (find tok classes :key 'lex:token-class))))
-
-;;; ----------------------------------------------------
-
-(defun .none-of (&rest classes)
-  "Ensures the current token is not any of a set of classes."
-  (.satisfy (lambda (tok)
-              (not (find tok classes :key 'lex:token-class)))))
+  (lambda (st)
+    (dolist (p ps)
+      (let ((x (funcall p st)))
+        (when x
+          (return (values x t)))))))
 
 ;;; ----------------------------------------------------
 
@@ -171,22 +164,49 @@
 
 (defun .many1 (p)
   "Try and parse a combinator one or more times."
-  (.bind p (lambda (x)
-             (.bind (.many p) (lambda (xs)
-                                (.ret (cons x xs)))))))
+  (>>= p (lambda (x)
+           (>>= (.many p) (lambda (xs)
+                            (.ret (cons x xs)))))))
+
+;;; ----------------------------------------------------
+
+(defun .sep-by (p sep)
+  "Zero or more occurances of p separated by sep."
+  (.opt (.sep-by1 p sep)))
+
+;;; ----------------------------------------------------
+
+(defun .sep-by1 (p sep)
+  "One or more occurances of p separated by sep."
+  (>>= p (lambda (x)
+           (>>= (.many (>> sep p)) (lambda (xs)
+                                     (.ret (cons x xs)))))))
 
 ;;; ----------------------------------------------------
 
 (defun .skip (p)
   "Optionally skip a parse combinator one or more times."
-  (.opt (_bind (.many1 p) (.ret nil))))
+  (.opt (>> (.many1 p) (.ret nil))))
+
+;;; ----------------------------------------------------
+
+(defun .between (b1 b2 p)
+  "Capture a combinator between guards."
+  (>> b1 (>>= p (lambda (x) (>> b2 (.ret x))))))
+
+;;; ----------------------------------------------------
+
+(defmacro .prog1 (p &body ps)
+  "Match the parse combinators in order, return the first."
+  (let ((x (gensym)))
+    `(>>= ,p (lambda (,x) (>> ,@ps (.ret ,x))))))
 
 ;;; ----------------------------------------------------
 
 (defmacro .let* ((&rest bindings) &body body)
-  "Create a series of .bind closures and execute a body."
+  "Create a series of >>= closures and execute a body."
   (if (null bindings)
       `(.ret (progn ,@body))
     (destructuring-bind ((var form) &rest rest)
         bindings
-      `(.bind ,form (lambda (,var) (.let* (,@rest) ,@body))))))
+      `(>>= ,form (lambda (,var) (.let* (,@rest) ,@body))))))
