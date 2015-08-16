@@ -1,6 +1,6 @@
 # The PARSE Package
 
-The parse package is a simple, monadic parsing library for Common Lisp. It is based on the Haskell [Parsec](http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html) library, but with macros making it a bit more accessible to Lisp. If you don't understand Parsec, [this](http://book.realworldhaskell.org/read/using-parsec.html) might be a good primer to help a bit. 
+The parse package is a simple, monadic parsing library for Common Lisp. It is based on the Haskell [Parsec](http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html) library, but with macros making it a bit more accessible to Lisp. If you don't understand Parsec, [this](http://book.realworldhaskell.org/read/using-parsec.html) might be a good primer to help a bit.
 
 It is designed to use my [`lexer`](https://github.com/massung/lexer) packages as well, but doesn't require it. All the examples in this README will use it, though.
 
@@ -12,18 +12,17 @@ This is **not** a tutorial on monads. There are lots of tutorials out there atte
 
 To give an example of how to think about it, let's consider a CSV file. If you were to try and write a parser for this by hand, you might begin by writing some pseudo code like so:
 
-	(defun parse-csv (string)
-	  (let ((*source* string))
-	    (parse-csv-lines)))
+    (defun parse-csv (string)
+      (parse-csv-lines))
 
-	(defun parse-csv-lines ()
-	  (loop for line = (parse-csv-line) while line collect line))
+    (defun parse-csv-lines ()
+      (loop for line = (parse-csv-line) while line collect line))
 
-	(defun parse-csv-line ()
-	  (loop for cell = (parse-csv-cell) while cell collect cell))
+    (defun parse-csv-line ()
+      (loop for cell = (parse-csv-cell) while cell collect cell))
 
-	(defun parse-csv-cell ()
-	  (parse-string-or-until-comma))
+    (defun parse-csv-cell ()
+      (parse-string-or-until-comma))
 
 Notice how we began at the top-level and kept breaking down each element that needed parsed until done. Combinatory parsing allows us to actually do the above very easily and expressively.
 
@@ -43,24 +42,24 @@ Assuming we have a [lexer](https://github.com/massung/lexer) that can tokenize o
 
 First, the CSV parser:
 
-	(defparser csv-parser
-	  (.sep-by1 'csv-record (.is :end)))
+    (defparser csv-parser
+      (.sep-by1 'csv-record (.is :end)))
 
 Now, the record:
 
-	(defparser csv-record
-	  (.sep-by1 'csv-cell (.is :comma)))
+    (defparser csv-record
+      (.sep-by1 'csv-cell (.is :comma)))
 
 And a cell:
 
-	(defparser csv-cell
-	  (.one-of (.is :cell) 'csv-string))
+    (defparser csv-cell
+      (.one-of (.is :cell) 'csv-string))
 
 Finally, a string:
 
-	(defparser csv-string
-	  (.let (cs (>> (.is :quote) (.many-until (.is :chars) (.is :quote))))
-	    (format nil "~{~a~}" cs)))
+    (defparser csv-string
+      (.let (cs (>> (.is :quote) (.many-until (.is :chars) (.is :quote))))
+        (format nil "~{~a~}" cs)))
 
 Hopefully the above code reads pretty close to English:
 
@@ -78,28 +77,31 @@ We started at the top, and slowly defined each unit that needed to be parsed and
 
 Now that we have built up our parsers, we can use the `parse` function to actually parse tokens.
 
-	(parse parser token-reader)
+    (parse parser token-reader)
 
 The *parser* is one of our defined parse combinator functions. The *token-reader* is a function that the parser can call to fetch a new token. It is expected that it return *nil* when there are no more tokens, otherwise it returns 2 values: a token class (typically a keyword) and an optional value for the token.
 
 For example, let's create a token-reader function that will return characters from a string.
 
-	CL-USER > (defun char-token-reader (s)
-	            (let ((i 0))
-	              #'(lambda ()
-	                  (when (< i (length s))
-	                    (multiple-value-prog1
-	                        (values :char (char s i))
-	                      (incf i))))))
+    CL-USER > (defun char-token-reader (s)
+                (let ((i 0))
+                  #'(lambda ()
+                      (when (< i (length s))
+                        (multiple-value-prog1
+                            (values :char (char s i))
+                          (incf i))))))
 
 Now, let's define a parser that will read all the characters from that token reader.
 
-	CL-USER > (defparser char-parser (.many (.is :char)))
+    CL-USER > (defparser char-parser (.many (.is :char)))
 
 Finally, let's parse a string with it.
 
-	CL-USER > (parse 'char-parser (char-token-reader "Hello"))
- 	(#\H #\e #\l #\l #\o)
+    CL-USER > (parse 'char-parser (char-token-reader "Hello"))
+    (#\H #\e #\l #\l #\o)
+    T
+
+It returned the list of all characters parsed. The second value returned indicates whether or not everything was parsed (e.g. the token reader returned NIL and there are no more tokens left).
 
 Done!
 
@@ -107,8 +109,8 @@ Done!
 
 If you use the [`lexer`](https://github.com/massung/lexer) package to tokenize, you can use the `with-token-reader` macro to create your *token-reader* function for a parser. Assuming you have a lexer created, you can parse like so:
 
-	CL-USER > (with-token-reader (next-token lexer)
-	            (parse 'my-parser next-token))
+    CL-USER > (with-token-reader (next-token lexer)
+                (parse 'my-parser next-token))
 
 For a simple example, check out some of these libraries I've created that use `lexer` and `parse` together:
 
@@ -126,7 +128,7 @@ Bind the result of parsing *p* by passing it to the function *f*. The result of 
 
 **>>** ***&rest** ps*
 
-Parse each combinator in *ps*, properly binding them together, but ignoring the intermediate results. Returns the final result. Similar to `progn`. 
+Parse each combinator in *ps*, properly binding them together, but ignoring the intermediate results. Returns the final result. Similar to `progn`.
 
 **.ret** *x*
 
@@ -210,4 +212,4 @@ Parse *p*, save the result, then parse *ps* and finally return the result of *p*
 
 **.progn** ***&body** body*
 
-A synonym for `>>` to be more "Lisp-y". 
+A synonym for `>>` to be more "Lisp-y".
