@@ -10,5 +10,4 @@
   :license "Apache 2.0"
   :description "Parsing package for Common Lisp."
   :serial t
-  :components ((:file "parse"))
-  :depends-on ("re" "lexer"))
+  :components ((:file "parse")))
