@@ -85,7 +85,7 @@
         (funcall p st)
       (let ((emptyp (null (parse-state-token-class st))))
         (if okp
-            (values x emptyp)
+            (values x t)
           (if (null errorp)
               (values error-value emptyp)
             (error "Parse error")))))))
@@ -128,12 +128,12 @@
 
 ;;; ----------------------------------------------------
 
-(defun .opt (p &optional value)
-  "Optionally match a parse combinator or return value."
+(defun .opt (x p)
+  "Optionally match a parse combinator or return x."
   #'(lambda (st)
-      (multiple-value-bind (x okp)
+      (multiple-value-bind (value okp)
           (funcall p st)
-        (values (if okp x value) t))))
+        (values (if okp value x) t))))
 
 ;;; ----------------------------------------------------
 
@@ -208,7 +208,7 @@
 
 (defun .many (p)
   "Try and parse a combinator zero or more times."
-  (.opt (.many1 p)))
+  (.opt nil (.many1 p)))
 
 ;;; ----------------------------------------------------
 
@@ -232,7 +232,7 @@
 
 (defun .sep-by (p sep)
   "Zero or more occurances of p separated by sep."
-  (.opt (.sep-by1 p sep)))
+  (.opt nil (.sep-by1 p sep)))
 
 ;;; ----------------------------------------------------
 
@@ -246,7 +246,7 @@
 
 (defun .skip (p)
   "Optionally skip a parse combinator one or more times."
-  (.opt (>> (.many1 p) (.ret nil))))
+  (.opt nil (>> (.many1 p) (.ret nil))))
 
 ;;; ----------------------------------------------------
 

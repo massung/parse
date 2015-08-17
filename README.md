@@ -101,7 +101,7 @@ Finally, let's parse a string with it.
     (#\H #\e #\l #\l #\o)
     T
 
-It returned the list of all characters parsed. The second value returned indicates whether or not everything was parsed (e.g. the token reader returned NIL and there are no more tokens left).
+It returned the list of all characters parsed. The second value returned indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
 
 Done!
 
@@ -138,9 +138,9 @@ Returns a value, transforming it into the monad.
 
 Signals an error. Use this instead of *error* because it will not be evaluated unless the parse combinator is called.
 
-**.opt** *p default*
+**.opt** *x p*
 
-Optionally parses *p*. If successful, returns the token value, otherwise returns *default* and does not consume the token.
+Optionally parses *p*. If successful, returns the token value, otherwise returns *x* and does not consume the token.
 
 **.satisfy** *pred*
 
