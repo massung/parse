@@ -23,7 +23,7 @@
    #:parse
 
    ;; declare a parse combinator
-   #:defparser
+   #:define-parser
 
    ;; monadic bind operations
    #:>>=
@@ -92,7 +92,7 @@
 
 ;;; ----------------------------------------------------
 
-(defmacro defparser (name &body ps)
+(defmacro define-parser (name &body ps)
   "Create a parse combinator."
   (let ((st (gensym)))
     `(defun ,name (,st)

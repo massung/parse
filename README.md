@@ -42,22 +42,22 @@ Assuming we have a [lexer](https://github.com/massung/lexer) that can tokenize o
 
 First, the CSV parser:
 
-    (defparser csv-parser
+    (define-parser csv-parser
       (.sep-by1 'csv-record (.is :end)))
 
 Now, the record:
 
-    (defparser csv-record
+    (define-parser csv-record
       (.sep-by1 'csv-cell (.is :comma)))
 
 And a cell:
 
-    (defparser csv-cell
+    (define-parser csv-cell
       (.one-of (.is :cell) 'csv-string))
 
 Finally, a string:
 
-    (defparser csv-string
+    (define-parser csv-string
       (.let (cs (>> (.is :quote) (.many-until (.is :chars) (.is :quote))))
         (.ret (format nil "~{~a~}" cs))))
 
@@ -93,7 +93,7 @@ For example, let's create a token-reader function that will return characters fr
 
 Now, let's define a parser that will read all the characters from that token reader.
 
-    CL-USER > (defparser char-parser (.many (.is :char)))
+    CL-USER > (define-parser char-parser (.many (.is :char)))
 
 Finally, let's parse a string with it.
 
