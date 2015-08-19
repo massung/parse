@@ -268,7 +268,7 @@
       `(.let ,(first bindings)
          (.let* ,(rest bindings)
            ,@body))
-    `(>> ,@body)))
+    `(progn ,@body)))
 
 ;;; ----------------------------------------------------
 
