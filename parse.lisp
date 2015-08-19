@@ -258,7 +258,7 @@
 
 (defmacro .let ((var p) &body body)
   "Bind a parse combinator result to var and return the body."
-  `(>>= ,p #'(lambda (,var) (>> ,@body))))
+  `(>>= ,p #'(lambda (,var) (declare (ignorable ,var)) ,@body)))
 
 ;;; ----------------------------------------------------
 
