@@ -170,6 +170,10 @@ Match the current token against one of the parse combinators in *ps*. Returns th
 
 Ensure that the current token does not match one of the parse combinators in *ps*. Returns the value of the token.
 
+**.maybe** *p*
+
+Try and parse *p*. If it's there, ignore it (.ret nil). If it's not there, that's okay.
+
 **.many** *p*
 
 Parse zero or more occurrences of *p*. Return the list of parsed values.

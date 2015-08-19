@@ -42,6 +42,7 @@
    #:.is-not
    #:.one-of
    #:.none-of
+   #:.maybe
    #:.many
    #:.many1
    #:.many-until
@@ -203,6 +204,12 @@
       (dolist (p ps (values (parse-state-token-value st) t))
         (when (nth-value 1 (funcall p st))
           (return)))))
+
+;;; ----------------------------------------------------
+
+(defun .maybe (p)
+  "Try and parse p, ignore it if there."
+  (.opt nil (>> p (.ret nil))))
 
 ;;; ----------------------------------------------------
 
