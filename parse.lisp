@@ -31,6 +31,11 @@
 
    ;; monadic functions
    #:.ret
+   #:.get
+   #:.put
+   #:.modify
+   #:.push
+   #:.pop
    #:.fail
    #:.opt
    #:.satisfy
@@ -62,7 +67,7 @@
 
 ;;; ----------------------------------------------------
 
-(defstruct parse-state read-token token-class token-value)
+(defstruct parse-state read-token token-class token-value data)
 
 ;;; ----------------------------------------------------
 
@@ -84,12 +89,11 @@
     ;; parse the token stream
     (multiple-value-bind (x okp)
         (funcall p st)
-      (let ((emptyp (null (parse-state-token-class st))))
-        (if okp
-            (values x t)
-          (if (null errorp)
-              (values error-value emptyp)
-            (error "Parse error")))))))
+      (if okp
+          (values x (parse-state-data st) t)
+        (if (null errorp)
+            (values error-value (parse-state-data st) nil)
+          (error "Parse error"))))))
 
 ;;; ----------------------------------------------------
 
@@ -141,6 +145,47 @@
 (defun .ret (x)
   "Convert X into a monadic value."
   #'(lambda (st) (values x st)))
+
+;;; ----------------------------------------------------
+
+(defun .get ()
+  "Always succeeds, returns the current parse state data."
+  #'(lambda (st)
+      (values (parse-state-data st) st)))
+
+;;; ----------------------------------------------------
+
+(defun .put (data)
+  "Always succeeds, puts data into the parse state."
+  #'(lambda (st)
+      (multiple-value-prog1
+          (values data st)
+        (setf (parse-state-data st) data))))
+
+;;; ----------------------------------------------------
+
+(defun .modify (f)
+  "Always succeeds, applys f with the parse state data."
+  #'(lambda (st)
+      (let ((x (funcall f (parse-state-data st))))
+        (multiple-value-prog1
+            (values x st)
+          (setf (parse-state-data st) x)))))
+
+;;; ----------------------------------------------------
+
+(defun .push (x)
+  "Always succeeds, assumes data is a list and pushes x onto it."
+  #'(lambda (st)
+      (let ((xs (push x (parse-state-data st))))
+        (values xs st))))
+
+;;; ----------------------------------------------------
+
+(defun .pop ()
+  "Always succeeds, assumes data is a list an pops it."
+  #'(lambda (st)
+      (values (pop (parse-state-data st)) st)))
 
 ;;; ----------------------------------------------------
 
