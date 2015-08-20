@@ -266,10 +266,10 @@ Parse *p* and bind the result into *var*. Execute *body* and return its result w
 
 Each binding is expected to be in the form of (*var p*). Each variable will be bound to the result of parsing *p*. Finally, *body* is executed and its result is returned with `.ret`.
 
-**.prog1** *p &body ps*
+**.prog1** *p &body body*
 
-Parse *p*, save the result, then parse *ps* and finally return the result of *p*.
+Parse *p*, save the result, then executes *body* and finally returns the result of *p* with `.ret`.
 
 **.progn** *&body body*
 
-A synonym for `>>` to be more "Lisp-y".
+Executes the body and returns the result with `.ret`. Basically `(.ret (progn ,@body))`.

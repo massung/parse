@@ -105,7 +105,7 @@
        ;; add a documentation string to the parser if provided
        ,(when (stringp (first ps)) (pop ps))
 
-       ;; parse the combinators as a progn
+       ;; parse the combinators, return the final result
        (funcall (>> ,@ps) ,st))))
 
 ;;; ----------------------------------------------------
@@ -330,13 +330,13 @@
 
 ;;; ----------------------------------------------------
 
-(defmacro .prog1 (p &body ps)
-  "Match the parse combinators in order, return the first."
+(defmacro .prog1 (p &body body)
+  "Match the parse combinator p, then execute a body."
   (let ((x (gensym)))
-    `(>>= ,p #'(lambda (,x) (>> ,@ps (.ret ,x))))))
+    `(>>= ,p #'(lambda (,x) ,@body (.ret ,x)))))
 
 ;;; ----------------------------------------------------
 
-(defmacro .progn (&body ps)
-  "Just a synonym for >>."
-  `(>> ,@ps))
+(defmacro .progn (&body body)
+  "Execute a body, return the final result."
+  `(.ret (progn ,@body)))
