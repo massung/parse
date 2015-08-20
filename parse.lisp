@@ -31,12 +31,12 @@
 
    ;; monadic functions
    #:.ret
+   #:.fail
    #:.get
    #:.put
    #:.modify
    #:.push
    #:.pop
-   #:.fail
    #:.opt
    #:.satisfy
 
@@ -47,6 +47,7 @@
    #:.is-not
    #:.one-of
    #:.none-of
+   #:.ignore
    #:.maybe
    #:.many
    #:.many1
@@ -62,7 +63,6 @@
    #:.prog1
    #:.progn))
 
-
 (in-package :parse)
 
 ;;; ----------------------------------------------------
@@ -71,9 +71,9 @@
 
 ;;; ----------------------------------------------------
 
-(defun parse (p next-token &optional (errorp t) error-value)
+(defun parse (p next-token &key initial-state (errorp t) error-value)
   "Create a parse-state and pass it through a parse combinator."
-  (let ((st (make-parse-state)))
+  (let ((st (make-parse-state :data initial-state)))
 
     ;; create a function that will read tokens into the parser
     (setf (parse-state-read-token st)
@@ -148,6 +148,14 @@
 
 ;;; ----------------------------------------------------
 
+(defun .fail (datum &rest arguments)
+  "Ensures that the parse combinator fails."
+  #'(lambda (st)
+      (declare (ignore st))
+      (apply #'error datum arguments)))
+
+;;; ----------------------------------------------------
+
 (defun .get ()
   "Always succeeds, returns the current parse state data."
   #'(lambda (st)
@@ -186,14 +194,6 @@
   "Always succeeds, assumes data is a list an pops it."
   #'(lambda (st)
       (values (pop (parse-state-data st)) st)))
-
-;;; ----------------------------------------------------
-
-(defun .fail (datum &rest arguments)
-  "Ensures that the parse combinator fails."
-  #'(lambda (st)
-      (declare (ignore st))
-      (apply #'error datum arguments)))
 
 ;;; ----------------------------------------------------
 
@@ -249,6 +249,12 @@
       (dolist (p ps (values (parse-state-token-value st) t))
         (when (nth-value 1 (funcall p st))
           (return)))))
+
+;;; ----------------------------------------------------
+
+(defun .ignore (p)
+  "Parse p, ignore the result."
+  (>> p (.ret nil)))
 
 ;;; ----------------------------------------------------
 

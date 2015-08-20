@@ -73,13 +73,17 @@ Hopefully the above code reads pretty close to English:
 
 We started at the top, and slowly defined each unit that needed to be parsed and defined a monadic parse combinator function for each.
 
-## Parsing
+## Basic Parsing
 
 Now that we have built up our parsers, we can use the `parse` function to actually parse tokens.
 
-    (parse parser token-reader)
+    (parse parser token-reader &key initial-state errorp error-value)
 
 The *parser* is one of our defined parse combinator functions. The *token-reader* is a function that the parser can call to fetch a new token. It is expected that it return *nil* when there are no more tokens, otherwise it returns 2 values: a token class (typically a keyword) and an optional value for the token.
+
+The *initial-state* will be covered later.
+
+The *errorp* and *error-value* parameters can be thought of like the similar parameters to [*read*](http://www.lispworks.com/documentation/HyperSpec/Body/f_rd_rd.htm#read). If the parse fails *errorp* indicates whether or not an error is signaled. If *errorp* is nil, then *error-value* will be returned instead. The default for *error* is T and *error-value* is nil.
 
 For example, let's create a token-reader function that will return characters from a string.
 
@@ -99,13 +103,40 @@ Finally, let's parse a string with it.
 
     CL-USER > (parse 'char-parser (char-token-reader "Hello"))
     (#\H #\e #\l #\l #\o)
+    NIL
     T
 
-It returned the list of all characters parsed. The second value returned indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
+It returned the list of all characters parsed. The second value returned is the parse state data when the parse completed. The final value indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
 
-Done!
+## Parsing With State
 
-## Parsing With Lexer
+While parsing, the parse monad has state data associated with it. This data can be gotten, set, modified, etc. It is yours to do with as you please. For example, let's create a simple parser that will parse numbers from a list until a non-number is reached, and add them all together.
+
+    CL-USER > (defun numeric-token-reader (list)
+                #'(lambda ()
+                    (let ((x (pop list)))
+                      (when (numberp x)
+                        (values :number x)))))
+    NUMERIC-TOKEN-READER
+
+Now let's create a parser that will return all the numbers parsed, but also accumulate them into the parse data as it goes.
+
+    CL-USER > (define-parser acc-parser
+                (.many (.let (n (.is :number))
+                          (.modify #'(lambda (x) (+ x n))))))
+
+Let's give it a whirl...
+
+    CL-USER > (parse 'acc-parser (numeric-token-reader '(1 2 3)) :initial-state 0)
+    (1 2 3)
+    6
+    T
+
+The result of the final parse combinator is `(1 2 3)`, the final parse state data is `6`, and `T` indicates that the parse combinator was successful.
+
+Parse state data can be useful for all sorts of things. For example, while parsing XML, you may use the parse state for a stack of tags being parsed.
+
+## Parsing With A Lexer
 
 If you use the [`lexer`](https://github.com/massung/lexer) package to tokenize, you can use the `with-token-reader` macro to create your *token-reader* function for a parser. Assuming you have a lexer created, you can parse like so:
 
@@ -117,6 +148,7 @@ For a simple example, check out some of these libraries I've created that use `l
 * [URL](http://github.com/massung/url)
 * [JSON](http://github.com/massung/json)
 * [CSV](http://github.com/massung/csv)
+* [HTML](http://github.com/massung/html)
 
 ## Combinator Functions
 
@@ -124,7 +156,7 @@ Here are all the parse combinator functions that come with the `parse` package:
 
 **>>=** *p f*
 
-Bind the result of parsing *p* by passing it to the function *f*. The result of *f* is expected to be a parse monad (using `.ret`).
+Bind the result of parsing *p* by passing it to the function *f*. The result of *f* is expected to be a parse combinator.
 
 **>>** *&rest ps*
 
@@ -137,6 +169,26 @@ Returns a value, transforming it into the monad.
 **.fail** *datum &rest arguments*
 
 Signals an error. Use this instead of *error* because it will not be evaluated unless the parse combinator is called.
+
+**.get**
+
+Each parse state has data associated with it. This parse combinator always succeeds and returns that data.
+
+**.put** *x*
+
+Replaces the current parse state data with *x*. Returns *x*.
+
+**.modify** *function*
+
+Gets the current parse state data and passes it to *function*. The return value is then put back into the parse state data.
+
+**.push** *x*
+
+Assumes the current parse state data is a list, and pushes *x* onto the head of the list. Returns the new parse state data.
+
+**.pop**
+
+Assumes the parse state data is a list and pops the top value off the list. Returns the value popped, and puts the rest of the list back into the parse state data.
 
 **.opt** *x p*
 
@@ -169,6 +221,10 @@ Match the current token against one of the parse combinators in *ps*. Returns th
 **.none-of** *&rest ps*
 
 Ensure that the current token does not match one of the parse combinators in *ps*. Returns the value of the token.
+
+**.ignore** *p*
+
+Parse *p*, but ignore the value. The `>>` function ignores intermediate results from parse combinators, but will always `.ret` the final value. The `.ignore` parse combinator will always `.ret nil`.
 
 **.maybe** *p*
 
