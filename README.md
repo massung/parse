@@ -1,8 +1,6 @@
 # The PARSE Package
 
-The parse package is a simple, monadic parsing library for Common Lisp. It is based on the Haskell [Parsec](http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html) library, but with macros making it a bit more accessible to Lisp. If you don't understand Parsec, [this](http://book.realworldhaskell.org/read/using-parsec.html) might be a good primer to help a bit.
-
-It is designed to use my [`lexer`](https://github.com/massung/lexer) packages as well, but doesn't require it. All the examples in this README will use it, though.
+The parse package is a simple, backtracking, recursive-descent, top-down, monadic parsing library for Common Lisp. It is based on the Haskell [Parsec](http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html) library, but with macros making it a bit more accessible to Lisp. If you don't understand Parsec, [this](http://book.realworldhaskell.org/read/using-parsec.html) might be a good primer to help a bit.
 
 ## Combinatory Parsing
 
@@ -85,56 +83,72 @@ The *initial-state* will be covered later.
 
 The *errorp* and *error-value* parameters can be thought of like the similar parameters to [*read*](http://www.lispworks.com/documentation/HyperSpec/Body/f_rd_rd.htm#read). If the parse fails *errorp* indicates whether or not an error is signaled. If *errorp* is nil, then *error-value* will be returned instead. The default for *error* is T and *error-value* is nil.
 
-For example, let's create a token-reader function that will return characters from a string.
+For now, let's create a simple token reader function that we can use throughout the rest of the examples. It will simply return elements from a list, one at a time, with the element being the token's value, and the type being the class of the token.
 
-    CL-USER > (defun char-token-reader (s)
-                (let ((i 0))
-                  #'(lambda ()
-                      (when (< i (length s))
-                        (multiple-value-prog1
-                            (values :char (char s i))
-                          (incf i))))))
+    CL-USER > (defun make-token-reader (list)
+                #'(lambda ()
+                    (let ((x (pop list)))
+                      (when x
+                        (typecase x
+                          (string (values :string x))
+                          (character (values :char x))
+                          (number (values :number x))
+                          (symbol (values :symbol x)))))))
 
-Now, let's define a parser that will read all the characters from that token reader.
+Let's now create our first parser. It will read as many characters as it can from the parser and collect them into a list.
 
     CL-USER > (define-parser char-parser (.many (.is :char)))
 
-Finally, let's parse a string with it.
+Finally, let's give it a try...
 
-    CL-USER > (parse 'char-parser (char-token-reader "Hello"))
-    (#\H #\e #\l #\l #\o)
-    NIL
+    CL-USER > (parse 'char-parser (make-token-reader '(#\a #\b #\c)))
+    (#\a #\b #\c)
     T
 
 It returned the list of all characters parsed. The second value indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
 
+## Backtracking
+
+The `parse` package allows for backtracking. This means that if one parse combinator fails, it can roll-back its state and try another combinator instead. For example:
+
+	CL-USER > (define-parser backtracking
+                (.one-of (>> (.is :number) (.many (.is :symbol)) (.is :char))
+                         (>> (.is :number) (.many (.is :symbol)) (.is :string))))
+	BACKTRACKING
+
+Notice how if we parsed a number, then a series of symbols, and a character wasn't parsed next, it would require the parser to completely roll-back and try and parse a number again? Well, let's try...
+
+	CL-USER > (parse 'backtracking (make-token-reader '(1 a b c #\z)))
+	#\z
+	T
+
+	CL-USER > (parse 'backtracking (make-token-reader '(1 a b c "Success!")))
+	"Success!"
+	T
+
 ## Parsing With State
 
-While parsing, the parse monad has state data associated with it. This data can be gotten, set, modified, etc. It is yours to do with as you please. For example, let's create a simple parser that will parse numbers from a list until a non-number is reached, and add them all together.
+While parsing, the parser has state data associated with it. This data can be gotten, set, modified, etc. It is yours to do with as you please. For example, let's create a parser that sums all the numbers it finds in our token stream.
 
-    CL-USER > (defun numeric-token-reader (list)
-                #'(lambda ()
-                    (let ((x (pop list)))
-                      (when (numberp x)
-                        (values :number x)))))
-    NUMERIC-TOKEN-READER
+    CL-USER > (define-parser 'accumulator
+                (.many (.one-of (.let (n (.is :number))
+                                  (.modify #'(lambda (x) (+ x n))))
+                                (.any)))
+                (.get))
 
-Now let's create a parser that will return all the numbers parsed, but also accumulate them into the parse data as it goes. Finally, it will get the parse state and return it.
-
-    CL-USER > (define-parser acc-parser
-                (.many (.let (n (.is :number))
-                         (.modify #'(lambda (x) (+ x n)))))
-                (>>= (.get) '.ret))
+It will parse as many tokens as are in the stream, first trying to parse a number. If it finds one, add it to the current state (with `.modify`), otherwise parse any other token (`.any`). Finally, return the state with `.get`.
 
 Let's give it a whirl...
 
-    CL-USER > (parse 'acc-parser (numeric-token-reader '(1 2 3)) :initial-state 0)
+    CL-USER > (parse 'accumulator (make-token-reader '(1 "ignore" 2 #\a #\z 3 foo bar)) :initial-state 0)
     6
     T
 
-The result of the final parse combinator is `6` and `T` indicates that the parse combinator was successful.
+Success!
 
-Parse state data can be useful for all sorts of things. For example, while parsing XML, you may use the parse state for a stack of tags being parsed.
+The functions for working with the parse state are `.get`, `.put`, `.modify`, `.push`, and `.pop`.
+
+*Notice how we had to pass an `:initial-state` to the `parse` function!*
 
 ## Parsing With A Lexer
 
