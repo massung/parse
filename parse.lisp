@@ -275,15 +275,15 @@
 
 ;;; ----------------------------------------------------
 
-(defun .is (class)
+(defun .is (class &key (test #'eql))
   "Checks if the current token is of a given class."
-  (.satisfy #'(lambda (c) (eql c class))))
+  (.satisfy #'(lambda (c) (funcall test c class))))
 
 ;;; ----------------------------------------------------
 
-(defun .is-not (class)
+(defun .is-not (class &key (test #'eql))
   "Ensures that the current token is not of a given class."
-  (.satisfy #'(lambda (c) (not (eq c class)))))
+  (.satisfy #'(lambda (c) (not (funcall test c class)))))
 
 ;;; ----------------------------------------------------
 
