@@ -79,13 +79,13 @@
 
 (defun parse-state-token-class (st)
   "Returns the class of the current token."
-  (caadr (parse-state-tokens st)))
+  (car (parse-state-next-token st)))
 
 ;;; ----------------------------------------------------
 
 (defun parse-state-token-value (st)
   "Returns the value of the current token."
-  (cdadr (parse-state-tokens st)))
+  (cdr (parse-state-next-token st)))
 
 ;;; ----------------------------------------------------
 
