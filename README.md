@@ -106,7 +106,7 @@ Finally, let's parse a string with it.
     NIL
     T
 
-It returned the list of all characters parsed. The second value returned is the parse state data when the parse completed. The final value indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
+It returned the list of all characters parsed. The second value indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
 
 ## Parsing With State
 
@@ -119,20 +119,20 @@ While parsing, the parse monad has state data associated with it. This data can 
                         (values :number x)))))
     NUMERIC-TOKEN-READER
 
-Now let's create a parser that will return all the numbers parsed, but also accumulate them into the parse data as it goes.
+Now let's create a parser that will return all the numbers parsed, but also accumulate them into the parse data as it goes. Finally, it will get the parse state and return it.
 
     CL-USER > (define-parser acc-parser
                 (.many (.let (n (.is :number))
-                          (.modify #'(lambda (x) (+ x n))))))
+                         (.modify #'(lambda (x) (+ x n)))))
+                (>>= (.get) '.ret))
 
 Let's give it a whirl...
 
     CL-USER > (parse 'acc-parser (numeric-token-reader '(1 2 3)) :initial-state 0)
-    (1 2 3)
     6
     T
 
-The result of the final parse combinator is `(1 2 3)`, the final parse state data is `6`, and `T` indicates that the parse combinator was successful.
+The result of the final parse combinator is `6` and `T` indicates that the parse combinator was successful.
 
 Parse state data can be useful for all sorts of things. For example, while parsing XML, you may use the parse state for a stack of tags being parsed.
 

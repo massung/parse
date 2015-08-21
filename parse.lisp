@@ -90,9 +90,9 @@
     (multiple-value-bind (x okp)
         (funcall p st)
       (if okp
-          (values x (parse-state-data st) t)
+          (values x t)
         (if (null errorp)
-            (values error-value (parse-state-data st) nil)
+            (values error-value nil)
           (error "Parse error"))))))
 
 ;;; ----------------------------------------------------
