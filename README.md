@@ -1,184 +1,247 @@
 # The PARSE Package
 
-The parse package is a simple, backtracking, recursive-descent, top-down, monadic parsing library for Common Lisp. It is based on the Haskell [Parsec](http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html) library, but with macros making it a bit more accessible to Lisp. If you don't understand Parsec, [this](http://book.realworldhaskell.org/read/using-parsec.html) might be a good primer to help a bit.
+The parse package is a simple token parsing library for Common Lisp.
 
-## Combinatory Parsing
+It is based on Haskell's [Parsec](http://hackage.haskell.org/package/parsec-3.1.9/docs/Text-Parsec.html) library, but using macros to make more accessible to Lisp.
 
-[Combinatory parsing](https://en.wikipedia.org/wiki/Parser_combinator) is a type of recursive-decent, top-down parsing.
+In a few technical bullet points, it is:
 
-This is **not** a tutorial on monads. There are lots of tutorials out there attempting to teach them. Most are terrible, some are quite good; [here's one](http://www.learnyouahaskell.com/a-fistful-of-monads).
+* [Top-down](https://en.wikipedia.org/wiki/Top-down_parsing)
+* [Recursive-descent](https://en.wikipedia.org/wiki/Recursive_descent_parser)
+* [Backtracking - LL(k)](https://en.wikipedia.org/wiki/LL_parser)
+* [Combinatory](https://en.wikipedia.org/wiki/Parser_combinator)
+* [Monadic](https://en.wikipedia.org/wiki/Monad_%28category_theory%29)
 
-To give an example of how to think about it, let's consider a CSV file. If you were to try and write a parser for this by hand, you might begin by writing some pseudo code like so:
+## Token Generation
 
-    (defun parse-csv (string)
-      (parse-csv-lines))
+Before we can parse, we need to generate tokens.
 
-    (defun parse-csv-lines ()
-      (loop for line = (parse-csv-line) while line collect line))
+The `parse` function must be given a function with 0-arity that can be called whenever it needs to read another token. This *next-token* function should return 2 values for each token:
 
-    (defun parse-csv-line ()
-      (loop for cell = (parse-csv-cell) while cell collect cell))
+* The token class (typically a keyword)
+* The token value (optional)
 
-    (defun parse-csv-cell ()
-      (parse-string-or-until-comma))
+When there are no more tokens in the source stream, it should return `nil`. *Note: it may be called several times at the end of the token stream, so it should handle that condition.*
 
-Notice how we began at the top-level and kept breaking down each element that needed parsed until done. Combinatory parsing allows us to actually do the above very easily and expressively.
+Let's create a simple token function we can use for the rest of our parsing examples. It will simply read the next the next value from a list and return that value as the token's value, and use the type as the token's class.
 
-Now let's learn how to use that to create a monadic parser...
+    (defun make-token-reader (list)
+      #'(lambda ()
+          (let ((x (pop list)))
+            (when x
+              (etypecase x
+                (string    (values :string x))
+                (character (values :character x))
+                (number    (values :number x))
+                (symbol    (values :symbol x)))))))
+
+*Note: this example shows that tokens can be generated many ways. However, the most common method of generating tokens would be with a [`lexer`](http://github.com/massung/lexer) package.*
 
 ## Quickstart
 
-...Let's make the CSV parser from above.
+Now that we can generate tokens, let's take a look at the `parse` function and try some simple examples.
 
-First, we identify each major part of the format that will be parsed:
+    (parse parser next-token &key initial-state (errorp t) error-value)
 
-* CSV (many records delimited by newlines)
-* Record (many cells delimited by commas)
-* Cell (quoted string or value)
+Ignoring the keyword arguments for now, simply note that the parse function requires both a parse combinator function (*parser*) and a token generator function (*next-token*).
 
-Assuming we have a [lexer](https://github.com/massung/lexer) that can tokenize our input stream (which we don't need quite yet), let's create some parsers that do what we want.
+Let's parse a symbol...
 
-First, the CSV parser:
-
-    (define-parser csv-parser
-      (.sep-by1 'csv-record (.is :end)))
-
-Now, the record:
-
-    (define-parser csv-record
-      (.sep-by1 'csv-cell (.is :comma)))
-
-And a cell:
-
-    (define-parser csv-cell
-      (.one-of (.is :cell) 'csv-string))
-
-Finally, a string:
-
-    (define-parser csv-string
-      (.let (cs (>> (.is :quote) (.many-until (.is :chars) (.is :quote))))
-        (.ret (format nil "~{~a~}" cs))))
-
-Hopefully the above code reads pretty close to English:
-
-* A *csv-parser* parses many *csv-records* (at least 1), each being separated by a `:end` token.
-
-* A *csv-record* parses many *csv-cells* (at least 1), each being separated by a `:comma` token.
-
-* A *csv-cell* is either a `:cell` token or a *csv-string*.
-
-* A *csv-string* is a `:quote` token, followed by many `:chars` tokens until another `:quote` token is reached, and joins them all together.
-
-We started at the top, and slowly defined each unit that needed to be parsed and defined a monadic parse combinator function for each.
-
-## Basic Parsing
-
-Now that we have built up our parsers, we can use the `parse` function to actually parse tokens.
-
-    (parse parser token-reader &key initial-state errorp error-value)
-
-The *parser* is one of our defined parse combinator functions. The *token-reader* is a function that the parser can call to fetch a new token. It is expected that it return *nil* when there are no more tokens, otherwise it returns 2 values: a token class (typically a keyword) and an optional value for the token.
-
-The *initial-state* will be covered later.
-
-The *errorp* and *error-value* parameters can be thought of like the similar parameters to [*read*](http://www.lispworks.com/documentation/HyperSpec/Body/f_rd_rd.htm#read). If the parse fails *errorp* indicates whether or not an error is signaled. If *errorp* is nil, then *error-value* will be returned instead. The default for *error* is T and *error-value* is nil.
-
-For now, let's create a simple token reader function that we can use throughout the rest of the examples. It will simply return elements from a list, one at a time, with the element being the token's value, and the type being the class of the token.
-
-    CL-USER > (defun make-token-reader (list)
-                #'(lambda ()
-                    (let ((x (pop list)))
-                      (when x
-                        (typecase x
-                          (string (values :string x))
-                          (character (values :char x))
-                          (number (values :number x))
-                          (symbol (values :symbol x)))))))
-
-Let's now create our first parser. It will read as many characters as it can from the parser and collect them into a list.
-
-    CL-USER > (define-parser char-parser (.many (.is :char)))
-
-Finally, let's give it a try...
-
-    CL-USER > (parse 'char-parser (make-token-reader '(#\a #\b #\c)))
-    (#\a #\b #\c)
+    CL-USER > (parse (.is :symbol) (make-token-reader '(a b c)))
+    A
     T
 
-It returned the list of all characters parsed. The second value indicates whether or not the parse was successful (since NIL is a valid return value from your parser).
+The first value returned is the result of the parse combinator function (in this case the value of the token parsed), and `T` indicating that the parse was successful.
+
+However, our parse functions are *combinatory*, so let's chain some more in there to make it a bit more interesting.
+
+    CL-USER > (parse (.many1 (.is :symbol)) (make-token-reader '(a b c)))
+    (A B C)
+    T
+
+Excellent! What if we supply the wrong tokens, though?
+
+    CL-USER > (parse (.many1 (.is :symbol)) (make-token-reader '(1 2 3)))
+    Parse failure
+
+Our parser expected symbols and was given numbers. Good. But, maybe we want to read symbols or numbers?
+
+    CL-USER > (parse (.many1 (.either (.is :symbol) (.is :number))) (make-token-reader '(a 1 b 2 c 3)))
+    (A 1 B 2 C 3)
+    T
+
+Okay, but now our parser is getting to be a bit unwieldy. Let's actually define our parser outside the REPL. In addition, let's parse symbols or numbers, but only keep the numbers in the resulting list.
+
+    (define-parser number-parser
+      "Parse a list of numbers, ignoring all symbols."
+      (.many1 (.either (.is :number)
+                       (.do (.skip-many1 (.is :symbol))
+                            (.is :number)))))
+
+Looking at this combinator, it tries (1 or more times) to either parse a number, or - if that fails - skip 1 or more symbols, and then parse a number.
+
+Now, let's plug it in and see what we get.
+
+    CL-USER > (parse 'number-parser (make-token-reader '(a z 1 b 2 c 3)))
+    (1 2 3)
+    T
+
+## Returning Values
+
+Until now, we've been using the `.is` parse combinator, which always returns the value of the token parsed. But, sometimes it's useful to return other values instead. This is done with the `.ret` parse combinator.
+
+    CL-USER > (parse (.ret 10) (make-token-reader nil))
+    10
+    T
+
+It's important to use `.ret`, as the values being returned must be put into a parse combinator function.
+
+For another example, let's create a parser that returns the character code of any characters parsed.
+
+    (define-parser char-code-parser
+      "Parses a character, returns its character code."
+      (.let (c (.is :character))
+        (.ret (char-code c))))
+
+And try it...
+
+    CL-USER > (parse 'char-code-parser (make-token-reader '(#\!)))
+    33
+    T
 
 ## Backtracking
 
-The `parse` package allows for backtracking. This means that if one parse combinator fails, it can roll-back its state and try another combinator instead. For example:
+The `parse` package supports arbitrarily deep backtracking. We can test this with a simple parse combinator...
 
-	CL-USER > (define-parser backtracking
-                (.one-of (>> (.is :number) (.many (.is :symbol)) (.is :char))
-                         (>> (.is :number) (.many (.is :symbol)) (.is :string))))
-	BACKTRACKING
+    (define-parser backtracker
+      "Test backtracking."
+      (.either (.do (.skip-many1 (.is :number)) (.is :char))
+               (.do (.skip-many1 (.is :number)) (.is :symbol))))
 
-Notice how if we parsed a number, then a series of symbols, and a character wasn't parsed next, it would require the parser to completely roll-back and try and parse a number again? Well, let's try...
+The above combinator should parse a bunch of numbers and then either a character or a symbol. Once it has parsed a list of numbers, though, if it fails to parse a character it needs to backtrack in order to try the next combinator.
 
-	CL-USER > (parse 'backtracking (make-token-reader '(1 a b c #\z)))
-	#\z
-	T
-
-	CL-USER > (parse 'backtracking (make-token-reader '(1 a b c "Success!")))
-	"Success!"
-	T
-
-## Parsing With State
-
-While parsing, the parser has state data associated with it. This data can be gotten, set, modified, etc. It is yours to do with as you please. For example, let's create a parser that sums all the numbers it finds in our token stream.
-
-    CL-USER > (define-parser 'accumulator
-                (.many (.one-of (.let (n (.is :number))
-                                  (.modify #'(lambda (x) (+ x n))))
-                                (.any)))
-                (.get))
-
-It will parse as many tokens as are in the stream, first trying to parse a number. If it finds one, add it to the current state (with `.modify`), otherwise parse any other token (`.any`). Finally, return the state with `.get`.
-
-Let's give it a whirl...
-
-    CL-USER > (parse 'accumulator (make-token-reader '(1 "ignore" 2 #\a #\z 3 foo bar)) :initial-state 0)
-    6
+    CL-USER > (parse 'backtracker (make-token-reader '(1 2 3 a)))
+    A
     T
 
 Success!
 
-The functions for working with the parse state are `.get`, `.put`, `.modify`, `.push`, and `.pop`.
+*Note: it's more efficient to write your parsers to be predictive when possible. The above parser can be re-written to be predictive like so:*
 
-*Notice how we had to pass an `:initial-state` to the `parse` function!*
+    (define-parser predictive
+      "A predictive version of the backtracker combinator."
+      (.do (.skip-many1 (.is :number))
+           (.either (.is :char)
+                    (.is :symbol))))
 
-## Parsing With A Lexer
+With the predictive version, the parser can just keep moving forward and not have to rewind state, and parse the same tokens again.
 
-If you use the [`lexer`](https://github.com/massung/lexer) package to tokenize, you can use the `with-token-reader` macro to create your *token-reader* function for a parser. Assuming you have a lexer created, you can parse like so:
+## Error Handling
 
-    CL-USER > (with-token-reader (next-token lexer)
-                (parse 'my-parser next-token))
+Remember the *errorp* and *error-value* keyword arguments to the `parse` function? They will control what happens from a parse failure.
 
-For a simple example, check out some of these libraries I've created that use `lexer` and `parse` together:
+If *errorp* it's set to `nil`, then instead of signaling a parse failure error, *error-value* will be returned, along with `nil` indicating that the parse failed.
+
+    CL-USER > (parse 'number-parser (make-token-reader '(#\a)) :errorp nil :error-value 'ack)
+    ACK
+    NIL
+
+There is also a `.fail` parse combinator function that can be used to report an error in parsing. It will signal an error during parsing. If *errorp* is `nil` and `.fail` is tripped, the error will be ignored and the parse will fail.
+
+## Parsing With State
+
+The parse monad also has state data associated with it. This data can be gotten (`.get`), set (`.put`), etc. It is yours to do with as you please.
+
+Let's create a parse combinator that will accumulate all the numbers it comes across in a token stream.
+
+    (define-parser sum-parser
+      "Add all number tokens together."
+      (.do (.many (.or (.let (n (.is :number))
+                         (.modify #'(lambda (x) (+ x n))))
+                       (.any)))
+           (.get)))
+
+Let's give it a whirl...
+
+    CL-USER > (parse 'sum-parser (make-token-reader '(1 a 2 b 3 c)) :initial-state 0)
+    6
+    T
+
+*Note: we needed to set the `:initial-state` of the parse monad!*
+
+Parse state data can be useful for all sorts of things. For example, while parsing a markup language (e.g. XML), the parse state might hold a stack of tags.
+
+## Gotchyas
+
+It's important to remember that while the parse combinators are functional, Common Lisp is neither a [purely functional](https://en.wikipedia.org/wiki/Purely_functional) nor [lazy](https://en.wikipedia.org/wiki/Lazy_evaluation) language!
+
+#### Side Effects in Combinators
+
+*All your parse combinators should be 100% free of side-effects!*
+
+Due to backtracking and the eagerness of building the parse combinators, code can execute during parsing that you didn't think would parse. For example:
+
+    (define-parser oops-parser
+      "Show an example of a bad parser."
+      (.either (.do (.is :number)
+                    (.ret (print 'ack)))
+               (.let (s (.is :string))
+                 (.ret (print s)))))
+
+The above parser looks like it will print "ACK" *only* if a number is parsed. But, let's see what actually happens...
+
+    CL-USER > (parse 'oops-parser (make-token-reader '("Test")))
+    ACK
+    "Test"
+
+The "ACK" was printed anyway, because the `.ret` function evaluated its arguments in order to build the parse combinator.
+
+#### Shared State
+
+While the parse state is copied between combinators - allowing for backtracking - if the state is an instance of an object, then the state data will be shallow copy.
+
+This means that it's possible to be walking down one parse branch that will eventually fail, modify the parse state, then backtrack to a correct branch, which is now working with an invalid parse state.
+
+## Real-World Examples
+
+Some real-world examples that use a [`lexer`](http://github.com/massung/lexer) to tokenize as well, check out the code in the following respositories:
 
 * [URL](http://github.com/massung/url)
 * [JSON](http://github.com/massung/json)
 * [CSV](http://github.com/massung/csv)
-* [HTML](http://github.com/massung/html)
+* [XML](http://github.com/massung/xml)
 
-## Combinator Functions
+## Documentation
 
-Here are all the parse combinator functions that come with the `parse` package:
+Here are all the built-in parse combinator functions:
 
 **>>=** *p f*
 
 Bind the result of parsing *p* by passing it to the function *f*. The result of *f* is expected to be a parse combinator.
 
-**>>** *&rest ps*
+**>>** *p m*
 
-Parse each combinator in *ps*, properly binding them together, but ignoring the intermediate results. Returns the final result. Similar to `progn`.
+Ignore the result of parsing *p* and immediately chain the parse combinator *m*.
+
+**.let** (*var p*) *&body body* (macro)
+
+Parse *p* and bind the result into *var*. Execute *body*. The final value of *body* needs to be a parse combinator to continue execution.
+
+**.let*** (*binding &rest bindings*) *&body body* (macro)
+
+Create bindings and chain then together. Similar to **.let**.
+
+**.do** (*p &rest ps*) (macro)
+
+Parse *p* and each combinator in *ps* in order. Ignore all the intermediate results and return the last one. This is just a wrapper around chaining **>>** combinators.
+
+**.or** (*p &rest ps*) (macro)
+
+Attempts to parse *p* and each combinator in *ps*. Returns the first successful result and ignores the rest. This is a wrapper around chaining **.either** combinators.
 
 **.ret** *x*
 
-Returns a value, transforming it into the monad.
+Returns the value *x*.
 
 **.fail** *datum &rest arguments*
 
@@ -204,14 +267,6 @@ Assumes the current parse state data is a list, and pushes *x* onto the head of 
 
 Assumes the parse state data is a list and pops the top value off the list. Returns the value popped, and puts the rest of the list back into the parse state data.
 
-**.opt** *x p*
-
-Optionally parses *p*. If successful, returns the token value, otherwise returns *x* and does not consume the token.
-
-**.satisfy** *pred*
-
-Ensures that the current token's class satisfies the *pred* predicate function. Returns the value of the token if successful.
-
 **.any**
 
 Matches any token. Returns the value of the token.
@@ -224,25 +279,21 @@ Matches if at the end of the token stream. Returns `nil`.
 
 Matches the current token against *class*. Returns the value of the token.
 
-**.is-not** *class*
+**.either** *p1 p2*
 
-Ensures that the current token is not of *class*. Returns the value of the token.
+Attempts to parse *p1*. If that fails, tries *p2*.
 
-**.one-of** *&rest ps*
+**.opt** *x p*
 
-Match the current token against one of the parse combinators in *ps*. Returns the first match's value.
-
-**.none-of** *&rest ps*
-
-Ensure that the current token does not match one of the parse combinators in *ps*. Returns the value of the token.
+Optionally parses *p*. If successful, returns the token value, otherwise returns *x* and does not consume the token.
 
 **.ignore** *p*
 
-Parse *p*, but ignore the value. The `>>` function ignores intermediate results from parse combinators, but will always `.ret` the final value. The `.ignore` parse combinator will always `.ret nil`.
+Parse *p*, but ignore the value (always returns `nil`).
 
 **.maybe** *p*
 
-Try and parse *p*. If it's there, ignore it (.ret nil). If it's not there, that's okay.
+Tries to parse *p*. If successful, returns `nil`. If it fails, returns `nil` anyway.
 
 **.many** *p*
 
@@ -264,26 +315,14 @@ Parse zero or more occurrences of *p* separated by *sep*. Return the list of all
 
 Parse one or more occurrences of *p* separated by *sep*. Return the list of all *p*'s parsed.
 
-**.skip** *p*
+**.skip-many** *p*
 
-Parse zero or more occurrences of *p*, ignore them and return `nil`.
+Parse zero or more occurrences of *p*, ignores the results and returns `nil`.
+
+**.skip-many1** *p*
+
+Parse one or more occurrences of *p*, ignores the results and returns `nil`.
 
 **.between** *open-guard close-guard p*
 
-Parse *open-guard*, then *p*, binding the result of *p*. Parse the *close-guard* and then return the result of *p*.
-
-**.let** (*var p*) *&body body*
-
-Parse *p* and bind the result into *var*. Execute *body* and return its result with `.ret`.
-
-**.let*** (*&rest bindings*) *&body body*
-
-Each binding is expected to be in the form of (*var p*). Each variable will be bound to the result of parsing *p*. Finally, *body* is executed and its result is returned with `.ret`.
-
-**.prog1** *p &body body*
-
-Parse *p*, save the result, then executes *body* and finally returns the result of *p* with `.ret`.
-
-**.progn** *&body body*
-
-Executes the body and returns the result with `.ret`. Basically `(.ret (progn ,@body))`.
+Parse *open-guard*, then *p*, binding the result of *p*. Parses the *close-guard* and then return the result of *p*.
