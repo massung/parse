@@ -30,6 +30,8 @@
    #:>>
 
    ;; combinator macros
+   #:.prog1
+   #:.progn
    #:.let
    #:.let*
    #:.do
@@ -54,7 +56,6 @@
    #:.maybe
    #:.many
    #:.many1
-   #:.many-until
    #:.sep-by
    #:.sep-by1
    #:.skip-many
@@ -166,6 +167,18 @@
       (let ((nst (nth-value 1 (funcall p st))))
         (when nst
           (funcall m nst)))))
+
+;;; ----------------------------------------------------
+
+(defmacro .prog1 (form &body rest)
+  "Macro to execute Lisp expressions, returning the first result."
+  `(.ret (prog1 ,form ,@rest)))
+
+;;; ----------------------------------------------------
+
+(defmacro .progn (&body rest)
+  "Macro to execute Lisp expressions, returning the last result."
+  `(.ret (progn ,@rest)))
 
 ;;; ----------------------------------------------------
 
@@ -310,18 +323,22 @@
 
 (defun .many1 (p)
   "Try and parse a combinator one or more times."
-  (.let (x p)
-    (.let (xs (.many p))
-      (.ret (cons x xs)))))
+  (.let (first p)
+    #'(lambda (st)
+        (loop
 
-;;; ----------------------------------------------------
+           ;; keep repeating the parse combinator until it fails
+           for (x nst) = (multiple-value-list (funcall p st))
+           while nst
 
-(defun .many-until (p term)
-  "Parse zero or more combinators until a terminal is reached."
-  (.either (.do term (.ret nil))
-           (.let (x p)
-             (.let (xs (.many-until p term))
-               (.ret (cons x xs))))))
+           ;; update the parse state
+           do (setf st nst)
+
+           ;; keep all the matches in a list
+           collect x into rest
+
+           ;; return the matches and final state
+           finally (return (values (cons first rest) st))))))
 
 ;;; ----------------------------------------------------
 
@@ -347,8 +364,7 @@
 
 (defun .skip-many1 (p)
   "Try and parse a combinator one or more times, ignore it."
-  (.let (x p)
-    (.skip-many p)))
+  (.maybe (.many1 p)))
 
 ;;; ----------------------------------------------------
 

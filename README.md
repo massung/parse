@@ -303,10 +303,6 @@ Parse zero or more occurrences of *p*. Return the list of parsed values.
 
 Parse one or more occurrences of *p*. Return the list of parsed values.
 
-**.many-until** *p term*
-
-Parse zero or more occurrences of *p* until *term* is successfully parsed. Return a list of all *p*'s parsed.
-
 **.sep-by** *p sep*
 
 Parse zero or more occurrences of *p* separated by *sep*. Return the list of all *p*'s parsed.
