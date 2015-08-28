@@ -110,16 +110,15 @@
     (funcall (parse-state-read-token st))
 
     ;; parse the token stream
-    (handler-case
-        (multiple-value-bind (x okp)
-            (funcall p st)
-          (if okp
-              (values x t)
-            (error "Parse failure")))
-      (condition (c)
-        (if errorp
-            (error c)
-          (values error-value nil))))))
+    (multiple-value-bind (x okp)
+        (funcall p st)
+      (cond (okp (values x t))
+
+            ;; should we error out?
+            (errorp (error "Parse failure"))
+
+            ;; return the error result and parse failure
+            (t (values error-value nil))))))
 
 ;;; ----------------------------------------------------
 
