@@ -223,6 +223,14 @@ Bind the result of parsing *p* by passing it to the function *f*. The result of 
 
 Ignore the result of parsing *p* and immediately chain the parse combinator *m*.
 
+**.prog1** *form &body body* (macro)
+
+Just like **prog1**, except that the results of the first form are returned to the parse monad with **.ret**. Useful for executing random Lisp code inside a parse combinator (beware of side-effects!).
+
+**.progn** *&body body* (macro)
+
+Just like **progn**, except that the results of the last form in *body* are returned to the parse monad with **.ret**. Useful for executing random Lisp code inside a parse combinator (beware of side-effects!).
+
 **.let** (*var p*) *&body body* (macro)
 
 Parse *p* and bind the result into *var*. Execute *body*. The final value of *body* needs to be a parse combinator to continue execution.
