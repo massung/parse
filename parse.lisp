@@ -56,6 +56,7 @@
    #:.maybe
    #:.many
    #:.many1
+   #:.many-until
    #:.sep-by
    #:.sep-by1
    #:.skip-many
@@ -338,6 +339,30 @@
 
            ;; return the matches and final state
            finally (return (values (cons first rest) st))))))
+
+;;; ----------------------------------------------------
+
+(defun .many-until (p end)
+  "Parse zero or more combinators until an end combinator is reached."
+  #'(lambda (st)
+      (loop
+
+         ;; try and parse the end
+         for nst = (nth-value 1 (funcall end st))
+         collect (if nst
+                     (loop-finish)
+                   (multiple-value-bind (x xst)
+                       (funcall p st)
+                     (if (null xst)
+                         (return nil)
+                       (prog1 x
+                         (setf st xst)))))
+
+         ;; join all the results together
+         into xs
+
+         ;; return the results
+         finally (return (values xs nst)))))
 
 ;;; ----------------------------------------------------
 
