@@ -210,6 +210,7 @@ Some real-world examples that use a [`lexer`](http://github.com/massung/lexer) t
 * [JSON](http://github.com/massung/json)
 * [CSV](http://github.com/massung/csv)
 * [XML](http://github.com/massung/xml)
+* [TOML](http://github.com/sgarciac/sawyer)
 
 ## Documentation
 
