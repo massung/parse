@@ -53,6 +53,7 @@
    #:.either
    #:.opt
    #:.ignore
+   #:.all
    #:.maybe
    #:.many
    #:.many1
@@ -306,6 +307,28 @@
 (defun .ignore (p)
   "Parse p, ignore the result."
   (.do p (.ret nil)))
+
+;;; ----------------------------------------------------
+
+(defun .all (p &rest ps)
+  "Parse each combinator in order and return all as a list."
+  (.let (first p)
+    #'(lambda (st)
+        (loop
+           for p in ps
+
+           ;; try the next combinator
+           for (x nst) = (multiple-value-list (funcall p st))
+           while nst
+
+           ;; update the parse state
+           do (setf st nst)
+
+           ;; keep all the matches in a list
+           collect x into rest
+
+           ;; return the matches and final state
+           finally (return (values (cons first rest) st))))))
 
 ;;; ----------------------------------------------------
 

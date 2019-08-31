@@ -208,7 +208,6 @@ Some real-world examples that use a [`lexer`](http://github.com/massung/lexer) t
 
 * [URL](http://github.com/massung/url)
 * [JSON](http://github.com/massung/json)
-* [CSV](http://github.com/massung/csv)
 * [XML](http://github.com/massung/xml)
 * [TOML](http://github.com/sgarciac/sawyer)
 
@@ -300,6 +299,10 @@ Optionally parses *p*. If successful, returns the token value, otherwise returns
 
 Parse *p*, but ignore the value (always returns `nil`).
 
+**.all** *p &rest ps*
+
+Parse *p* and then the *ps* combinators in order, returns a list of all the values parsed in-order.
+
 **.maybe** *p*
 
 Tries to parse *p*. If successful, returns `nil`. If it fails, returns `nil` anyway.
@@ -311,6 +314,10 @@ Parse zero or more occurrences of *p*. Return the list of parsed values.
 **.many1** *p*
 
 Parse one or more occurrences of *p*. Return the list of parsed values.
+
+**.many-until** *p end*
+
+Parse *p* zero or more times and then parse *end* returning a list of all parsed values (excluding *end*).
 
 **.sep-by** *p sep*
 
