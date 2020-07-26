@@ -207,7 +207,6 @@ This means that it's possible to be walking down one parse branch that will even
 Some real-world examples that use a [`lexer`](http://github.com/massung/lexer) to tokenize as well, check out the code in the following respositories:
 
 * [URL](http://github.com/massung/url)
-* [JSON](http://github.com/massung/json)
 * [XML](http://github.com/massung/xml)
 * [TOML](http://github.com/sgarciac/sawyer)
 
